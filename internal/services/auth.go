@@ -2,17 +2,24 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"net/mail"
+	"os"
 	"regexp"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/suhailabdi2/auth-system-/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
 
+var WrongPassword = errors.New("Passwords don't match")
+var InActiveUser = errors.New("User is inactive")
+
 func validatePassword(password string) error {
-	match1, err := regexp.MatchString(`^.{8,}$)`, password)
+	match1, err := regexp.MatchString(`^.{8,}$`, password)
 	if err != nil {
 		return err
 	}
@@ -49,4 +56,46 @@ func Register(ctx context.Context, conn *pgx.Conn, email, password string) error
 	}
 	return nil
 
+}
+func Login(ctx context.Context, conn *pgx.Conn, email, password string) (string, string, error) {
+	user, err := repository.GetUserByEmail(ctx, conn, email)
+	if err != nil {
+		return "", "", err
+	}
+	if !user.IsActive {
+		return "", "", InActiveUser
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.HashedPassword), []byte(password)); err != nil {
+		return "", "", WrongPassword
+	}
+	// if tokenString,err := GenerateAccessToken(user.UserID,email); err != nil{
+	// 	return "","",err
+	// }
+	tokenString, err := GenerateAccessToken(user.UserID, email)
+	if err != nil {
+		return "", "", err
+	}
+	RefreshToken := GenerateRefreshToken()
+	if err := repository.StoreRefreshToken(ctx, conn, RefreshToken, user.UserID, time.Now().Add(7*24*time.Hour)); err != nil {
+		return "", "", err
+	}
+	return tokenString, RefreshToken, nil
+}
+func GenerateAccessToken(userID, email string) (string, error) {
+	var tokenSecret = os.Getenv("JWT_SECRET_KEY")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"email":   email,
+		"exp":     time.Now().Add(15 * time.Minute).Unix(),
+	})
+	tokenString, err := token.SignedString([]byte(tokenSecret))
+	if err != nil {
+		return "", errors.New("error generating a new token")
+	}
+	return tokenString, nil
+
+}
+func GenerateRefreshToken() string {
+	RefreshToken := rand.Text()
+	return RefreshToken
 }
