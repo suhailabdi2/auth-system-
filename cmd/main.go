@@ -28,7 +28,7 @@ func main() {
 	server.HandleFunc("/auth/login", handlers.LoginHandler(database)).Methods("POST")
 	server.HandleFunc("/auth/refresh", handlers.RefreshTokensHandler).Methods("POST")
 	server.HandleFunc("/auth/logout", handlers.LogoutHandler).Methods("POST")
-	server.HandleFunc("/auth/me", handlers.MeHandler).Methods("GET")
+	server.Handle("/auth/me", handlers.MeMiddleware(http.HandlerFunc(handlers.MeHandler(database)))).Methods("GET")
 	server.HandleFunc("/auth/google", handlers.GoogleHandler).Methods("GET")
 	server.HandleFunc("/auth/google/callback", handlers.CallbackHandler).Methods("GET")
 	fmt.Println("\n routes set up")

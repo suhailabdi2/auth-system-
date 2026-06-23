@@ -68,13 +68,16 @@ func LoginHandler(conn *pgx.Conn) http.HandlerFunc {
 }
 
 func RefreshTokensHandler(w http.ResponseWriter, r *http.Request) {
-	//todo
+
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 }
-func MeHandler(w http.ResponseWriter, r *http.Request) {
+func MeHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+	}
 
 }
 
