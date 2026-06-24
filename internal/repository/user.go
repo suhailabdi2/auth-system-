@@ -10,6 +10,7 @@ import (
 
 var ErrEmailAlreadyExists = errors.New("Email already exists")
 var ErrEmailDoesnTExist = errors.New("no user under that email")
+var UserDoesntExist = errors.New("User not found")
 
 type UserDetails struct {
 	UserID             string
@@ -17,6 +18,12 @@ type UserDetails struct {
 	HashedPassword     string
 	IsActive           bool
 	VerificationStatus bool
+}
+type UserResponse struct {
+	UserID             string `json:"user_id"`
+	Email              string `json:"email"`
+	IsActive           bool   `json:"is_active"`
+	VerificationStatus bool   `json:"verification_status"`
 }
 
 func CreateUser(ctx context.Context, conn *pgx.Conn, email, hashedPassword string, method string) error {
@@ -39,6 +46,18 @@ func GetUserByEmail(ctx context.Context, conn *pgx.Conn, email string) (*UserDet
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrEmailDoesnTExist
+		}
+		return nil, err
+	}
+	return &user, nil
+}
+func GetUserByID(ctx context.Context, conn *pgx.Conn, userID string) (*UserResponse, error) {
+	var user UserResponse
+	row := conn.QueryRow(ctx, "select user_id,email,is_active,verification_status from users where user_id = $1;", userID)
+	err := row.Scan(&user.UserID, &user.Email, &user.IsActive, &user.VerificationStatus)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, UserDoesntExist
 		}
 		return nil, err
 	}

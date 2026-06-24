@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -76,7 +77,21 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 }
 func MeHandler(conn *pgx.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
+		userIDKey := r.Context().Value(UserIDKey)
+		userID := userIDKey.(string)
+		user, err := repository.GetUserByID(r.Context(), conn, userID)
+		if err != nil {
+			if err == repository.UserDoesntExist {
+				w.WriteHeader(http.StatusNotFound)
+				fmt.Fprintf(w, "User ID not found")
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "Error getting user id")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(user)
 	}
 
 }
