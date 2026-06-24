@@ -19,6 +19,9 @@ type LoginResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
 
 func RegisterHandler(conn *pgx.Conn) http.HandlerFunc {
 	//todo
@@ -68,12 +71,50 @@ func LoginHandler(conn *pgx.Conn) http.HandlerFunc {
 	}
 }
 
-func RefreshTokensHandler(w http.ResponseWriter, r *http.Request) {
+func RefreshTokensHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var refReq RefreshRequest
+		var res LoginResponse
+		if err := json.NewDecoder(r.Body).Decode(&refReq); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, "Missing Refresh Token")
+			return
+		}
+		AccessToken, RefreshToken, err := services.RefreshToken(r.Context(), conn, refReq.RefreshToken)
+		if err != nil {
+			if err == services.ErrTokenExpired {
+				writeError(w, http.StatusForbidden, "token expired")
+				return
+			}
+			if err == services.ErrTokenReuse {
+				writeError(w, http.StatusForbidden, "token already used")
+				return
+			}
+			writeError(w, http.StatusForbidden, "token expired")
+			return
+		}
+		res.AccessToken = AccessToken
+		res.RefreshToken = RefreshToken
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(res)
+	}
 
 }
 
-func LogoutHandler(w http.ResponseWriter, r *http.Request) {
-
+func LogoutHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var refReq RefreshRequest
+		if err := json.NewDecoder(r.Body).Decode(&refReq); err != nil {
+			writeError(w, http.StatusBadRequest, "Missing refresh token")
+			return
+		}
+		if err := repository.RevokeRefreshToken(r.Context(), conn, refReq.RefreshToken); err != nil {
+			writeError(w, http.StatusInternalServerError, "Error revoking token")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 func MeHandler(conn *pgx.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -102,4 +143,9 @@ func GoogleHandler(w http.ResponseWriter, r *http.Request) {
 
 func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 
+}
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

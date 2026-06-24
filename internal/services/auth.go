@@ -17,6 +17,8 @@ import (
 
 var WrongPassword = errors.New("Passwords don't match")
 var InActiveUser = errors.New("User is inactive")
+var ErrTokenReuse = errors.New("Token already revoked")
+var ErrTokenExpired = errors.New("Token expired")
 
 func validatePassword(password string) error {
 	match1, err := regexp.MatchString(`^.{8,}$`, password)
@@ -98,4 +100,34 @@ func GenerateAccessToken(userID, email string) (string, error) {
 func GenerateRefreshToken() string {
 	RefreshToken := rand.Text()
 	return RefreshToken
+}
+func RefreshToken(ctx context.Context, conn *pgx.Conn, tokenStr string) (string, string, error) {
+	OldToken, err := repository.GetRefreshToken(ctx, conn, tokenStr)
+
+	if err != nil {
+		return "", "", err
+	}
+	UserDetails, err := repository.GetUserByID(ctx, conn, OldToken.UserID)
+	if err != nil {
+		return "", "", err
+	}
+	if OldToken.RevokedAt != nil {
+		if err := repository.RevokeRefreshTokensByUser(ctx, conn, OldToken.UserID); err != nil {
+			return "", "", ErrTokenReuse
+		}
+		return "", "", ErrTokenReuse
+	}
+	if time.Now().After(OldToken.ExpiryDate) {
+		return "", "", ErrTokenExpired
+	}
+	NewToken := GenerateRefreshToken()
+	if err := repository.StoreRefreshToken(ctx, conn, NewToken, OldToken.UserID, time.Now().Add(7*24*time.Hour)); err != nil {
+		return "", "", err
+	}
+	AccessToken, err := GenerateAccessToken(UserDetails.UserID, UserDetails.Email)
+	if err != nil {
+		return "", "", err
+	}
+	return NewToken, AccessToken, nil
+
 }
