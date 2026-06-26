@@ -83,14 +83,14 @@ func RefreshTokensHandler(conn *pgx.Conn) http.HandlerFunc {
 		AccessToken, RefreshToken, err := services.RefreshToken(r.Context(), conn, refReq.RefreshToken)
 		if err != nil {
 			if err == services.ErrTokenExpired {
-				writeError(w, http.StatusForbidden, "token expired")
+				WriteError(w, http.StatusForbidden, "token expired")
 				return
 			}
 			if err == services.ErrTokenReuse {
-				writeError(w, http.StatusForbidden, "token already used")
+				WriteError(w, http.StatusForbidden, "token already used")
 				return
 			}
-			writeError(w, http.StatusForbidden, "token expired")
+			WriteError(w, http.StatusForbidden, "token expired")
 			return
 		}
 		res.AccessToken = AccessToken
@@ -106,11 +106,11 @@ func LogoutHandler(conn *pgx.Conn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var refReq RefreshRequest
 		if err := json.NewDecoder(r.Body).Decode(&refReq); err != nil {
-			writeError(w, http.StatusBadRequest, "Missing refresh token")
+			WriteError(w, http.StatusBadRequest, "Missing refresh token")
 			return
 		}
 		if err := repository.RevokeRefreshToken(r.Context(), conn, refReq.RefreshToken); err != nil {
-			writeError(w, http.StatusInternalServerError, "Error revoking token")
+			WriteError(w, http.StatusInternalServerError, "Error revoking token")
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -144,7 +144,7 @@ func GoogleHandler(w http.ResponseWriter, r *http.Request) {
 func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 
 }
-func writeError(w http.ResponseWriter, status int, message string) {
+func WriteError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})

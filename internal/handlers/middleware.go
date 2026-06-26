@@ -3,12 +3,15 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/redis/go-redis/v9"
 )
 
 type contextKey string
@@ -45,4 +48,30 @@ func MeMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+func RateLimiter(client *redis.Client) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ClientIp, _, err := net.SplitHostPort(r.RemoteAddr)
+			key := "rate_limit:" + ClientIp
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, "Error getting ip address")
+				return
+			}
+			count, err := client.Incr(context.Background(), key).Result()
+			if err != nil {
+				WriteError(w, http.StatusInternalServerError, "Error getting count")
+				return
+			}
+			if count == 1 {
+				client.Expire(context.Background(), key, time.Minute)
+			}
+			if count > 5 {
+				WriteError(w, http.StatusTooManyRequests, "Rate limit exceeded")
+				return
+			}
+			next.ServeHTTP(w, r)
+
+		})
+	}
 }

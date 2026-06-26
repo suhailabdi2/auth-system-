@@ -22,10 +22,15 @@ func main() {
 	if err != nil {
 		log.Fatal("Error connecting to the database", err)
 	}
+	RedisString := os.Getenv("REDIS_CONNECTION")
+	RdConnect, err := db.CreateRedisClient(RedisString)
+	if err != nil {
+		log.Fatal("Error connecting to the redis server")
+	}
 	server := mux.NewRouter()
 	fmt.Println("\n Mux set up!")
 	server.HandleFunc("/auth/register", handlers.RegisterHandler(database)).Methods("POST")
-	server.HandleFunc("/auth/login", handlers.LoginHandler(database)).Methods("POST")
+	server.Handle("/auth/login", handlers.RateLimiter(RdConnect)(http.HandlerFunc(handlers.LoginHandler(database)))).Methods("POST")
 	server.HandleFunc("/auth/refresh", handlers.RefreshTokensHandler(database)).Methods("POST")
 	server.HandleFunc("/auth/logout", handlers.LogoutHandler(database)).Methods("POST")
 	server.Handle("/auth/me", handlers.MeMiddleware(http.HandlerFunc(handlers.MeHandler(database)))).Methods("GET")
