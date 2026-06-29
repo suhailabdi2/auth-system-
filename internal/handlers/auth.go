@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/suhailabdi2/auth-system-/internal/repository"
@@ -21,6 +22,11 @@ type LoginResponse struct {
 }
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+type GoogleUser struct {
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	ID    string `json:"id"`
 }
 
 func RegisterHandler(conn *pgx.Conn) http.HandlerFunc {
@@ -138,14 +144,81 @@ func MeHandler(conn *pgx.Conn) http.HandlerFunc {
 }
 
 func GoogleHandler(w http.ResponseWriter, r *http.Request) {
+	client := OAuthGoogle()
+	log.Print(client.ClientID)
+	log.Println(client.ClientSecret)
+	url := client.AuthCodeURL("state")
+	http.Redirect(w, r, url, http.StatusFound)
 
 }
+func CallbackHandler(conn *pgx.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// existing codec
+		client := OAuthGoogle()
+		code := r.URL.Query().Get("code")
+		var user GoogleUser
 
-func CallbackHandler(w http.ResponseWriter, r *http.Request) {
+		if code == "" {
+			WriteError(w, http.StatusBadRequest, "Missing code")
+			return
+		}
+		token, err := client.Exchange(r.Context(), code)
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, "Error generating token")
+			return
+		}
+		httpClient := client.Client(r.Context(), token)
+		resp, err := httpClient.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 
+		if err != nil {
+			WriteError(w, http.StatusInternalServerError, "Error getting response from google")
+			return
+		}
+		defer resp.Body.Close()
+		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+			WriteError(w, http.StatusInternalServerError, "Error decoding")
+			return
+		}
+		existingUser, err := repository.GetUserByEmail(r.Context(), conn, user.Email)
+		if err != nil {
+			if err == repository.ErrEmailDoesnTExist {
+				if err := repository.CreateUser(r.Context(), conn, user.Email, "", "google"); err != nil {
+					WriteError(w, http.StatusInternalServerError, "Error creating new user")
+					return
+				}
+				newUser, err := repository.GetUserByEmail(r.Context(), conn, user.Email)
+				if err != nil {
+					WriteError(w, http.StatusInternalServerError, "Error getting new user")
+					return
+				}
+				issueTokens(w, r, conn, newUser.UserID, newUser.Email, http.StatusCreated)
+				return
+			} else {
+				WriteError(w, http.StatusInternalServerError, "Error getting user")
+				return
+			}
+		}
+		issueTokens(w, r, conn, existingUser.UserID, existingUser.Email, http.StatusOK)
+	}
 }
+
 func WriteError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+func issueTokens(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, userID, email string, status int) {
+	refreshToken := services.GenerateRefreshToken()
+	if err := repository.StoreRefreshToken(r.Context(), conn, refreshToken, userID, time.Now().Add(7*24*time.Hour)); err != nil {
+		WriteError(w, http.StatusInternalServerError, "Error storing refresh token")
+		return
+	}
+	accessToken, err := services.GenerateAccessToken(userID, email)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "Error generating token")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(LoginResponse{AccessToken: accessToken, RefreshToken: refreshToken})
 }

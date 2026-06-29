@@ -35,7 +35,7 @@ func main() {
 	server.HandleFunc("/auth/logout", handlers.LogoutHandler(database)).Methods("POST")
 	server.Handle("/auth/me", handlers.MeMiddleware(http.HandlerFunc(handlers.MeHandler(database)))).Methods("GET")
 	server.HandleFunc("/auth/google", handlers.GoogleHandler).Methods("GET")
-	server.HandleFunc("/auth/google/callback", handlers.CallbackHandler).Methods("GET")
+	server.HandleFunc("/auth/google/callback", handlers.CallbackHandler(database)).Methods("GET")
 	fmt.Println("\n routes set up")
 
 	if err := http.ListenAndServe(":8080", server); err != nil {
