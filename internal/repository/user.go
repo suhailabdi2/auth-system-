@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrEmailAlreadyExists = errors.New("Email already exists")
@@ -26,7 +27,7 @@ type UserResponse struct {
 	VerificationStatus bool   `json:"verification_status"`
 }
 
-func CreateUser(ctx context.Context, conn *pgx.Conn, email, hashedPassword string, method string) error {
+func CreateUser(ctx context.Context, conn *pgxpool.Pool, email, hashedPassword string, method string) error {
 
 	_, err := conn.Exec(ctx, "insert into users (email, hashed_password,registration_method) values ($1, $2,$3);", email, hashedPassword, method)
 	if err != nil {
@@ -39,7 +40,7 @@ func CreateUser(ctx context.Context, conn *pgx.Conn, email, hashedPassword strin
 	return nil
 }
 
-func GetUserByEmail(ctx context.Context, conn *pgx.Conn, email string) (*UserDetails, error) {
+func GetUserByEmail(ctx context.Context, conn *pgxpool.Pool, email string) (*UserDetails, error) {
 	var user UserDetails
 	row := conn.QueryRow(ctx, "select user_id,email,hashed_password,is_active,verification_status from users where email = $1;", email)
 	err := row.Scan(&user.UserID, &user.Email, &user.HashedPassword, &user.IsActive, &user.VerificationStatus)
@@ -51,7 +52,7 @@ func GetUserByEmail(ctx context.Context, conn *pgx.Conn, email string) (*UserDet
 	}
 	return &user, nil
 }
-func GetUserByID(ctx context.Context, conn *pgx.Conn, userID string) (*UserResponse, error) {
+func GetUserByID(ctx context.Context, conn *pgxpool.Pool, userID string) (*UserResponse, error) {
 	var user UserResponse
 	row := conn.QueryRow(ctx, "select user_id,email,is_active,verification_status from users where user_id = $1;", userID)
 	err := row.Scan(&user.UserID, &user.Email, &user.IsActive, &user.VerificationStatus)

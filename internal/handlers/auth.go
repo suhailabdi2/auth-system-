@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/suhailabdi2/auth-system-/internal/repository"
 	"github.com/suhailabdi2/auth-system-/internal/services"
 )
@@ -29,7 +29,7 @@ type GoogleUser struct {
 	ID    string `json:"id"`
 }
 
-func RegisterHandler(conn *pgx.Conn) http.HandlerFunc {
+func RegisterHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	//todo
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("Handler reached")
@@ -51,7 +51,7 @@ func RegisterHandler(conn *pgx.Conn) http.HandlerFunc {
 	}
 }
 
-func LoginHandler(conn *pgx.Conn) http.HandlerFunc {
+func LoginHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req RegisterRequest
 		var res LoginResponse
@@ -77,7 +77,7 @@ func LoginHandler(conn *pgx.Conn) http.HandlerFunc {
 	}
 }
 
-func RefreshTokensHandler(conn *pgx.Conn) http.HandlerFunc {
+func RefreshTokensHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var refReq RefreshRequest
 		var res LoginResponse
@@ -105,10 +105,9 @@ func RefreshTokensHandler(conn *pgx.Conn) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(res)
 	}
-
 }
 
-func LogoutHandler(conn *pgx.Conn) http.HandlerFunc {
+func LogoutHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var refReq RefreshRequest
 		if err := json.NewDecoder(r.Body).Decode(&refReq); err != nil {
@@ -122,7 +121,7 @@ func LogoutHandler(conn *pgx.Conn) http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
-func MeHandler(conn *pgx.Conn) http.HandlerFunc {
+func MeHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userIDKey := r.Context().Value(UserIDKey)
 		userID := userIDKey.(string)
@@ -151,7 +150,7 @@ func GoogleHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusFound)
 
 }
-func CallbackHandler(conn *pgx.Conn) http.HandlerFunc {
+func CallbackHandler(conn *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// existing codec
 		client := OAuthGoogle()
@@ -207,7 +206,7 @@ func WriteError(w http.ResponseWriter, status int, message string) {
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
-func issueTokens(w http.ResponseWriter, r *http.Request, conn *pgx.Conn, userID, email string, status int) {
+func issueTokens(w http.ResponseWriter, r *http.Request, conn *pgxpool.Pool, userID, email string, status int) {
 	refreshToken := services.GenerateRefreshToken()
 	if err := repository.StoreRefreshToken(r.Context(), conn, refreshToken, userID, time.Now().Add(7*24*time.Hour)); err != nil {
 		WriteError(w, http.StatusInternalServerError, "Error storing refresh token")

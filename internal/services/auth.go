@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/suhailabdi2/auth-system-/internal/repository"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -42,7 +42,7 @@ func validateEmail(email string) error {
 	return nil
 }
 
-func Register(ctx context.Context, conn *pgx.Conn, email, password string) error {
+func Register(ctx context.Context, conn *pgxpool.Pool, email, password string) error {
 	if err := validatePassword(password); err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func Register(ctx context.Context, conn *pgx.Conn, email, password string) error
 	return nil
 
 }
-func Login(ctx context.Context, conn *pgx.Conn, email, password string) (string, string, error) {
+func Login(ctx context.Context, conn *pgxpool.Pool, email, password string) (string, string, error) {
 	user, err := repository.GetUserByEmail(ctx, conn, email)
 	if err != nil {
 		return "", "", err
@@ -101,7 +101,7 @@ func GenerateRefreshToken() string {
 	RefreshToken := rand.Text()
 	return RefreshToken
 }
-func RefreshToken(ctx context.Context, conn *pgx.Conn, tokenStr string) (string, string, error) {
+func RefreshToken(ctx context.Context, conn *pgxpool.Pool, tokenStr string) (string, string, error) {
 	OldToken, err := repository.GetRefreshToken(ctx, conn, tokenStr)
 
 	if err != nil {
@@ -129,5 +129,4 @@ func RefreshToken(ctx context.Context, conn *pgx.Conn, tokenStr string) (string,
 		return "", "", err
 	}
 	return NewToken, AccessToken, nil
-
 }
