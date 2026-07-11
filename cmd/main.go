@@ -16,7 +16,7 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("Error loading environment variables", err)
 	}
-	// port := os.Getenv("PORT")
+	port := os.Getenv("PORT")
 	dbString := os.Getenv("DATABASE_URL")
 	database, err := db.Connect(dbString)
 	if err != nil {
@@ -38,7 +38,7 @@ func main() {
 	server.HandleFunc("/auth/google/callback", handlers.CallbackHandler(database)).Methods("GET")
 	fmt.Println("\n routes set up")
 
-	if err := http.ListenAndServe(":8080", server); err != nil {
+	if err := http.ListenAndServe(":"+port, server); err != nil {
 		log.Fatal("Error starting server: ", err)
 	}
 	fmt.Println("Server works!")
